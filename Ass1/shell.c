@@ -16,7 +16,7 @@
 //Define the max number of arguments to be 20
 #define MAX_ARGS 20
 #define MAX_DIRECTORY_SIZE 1024
-#define MAX_BG_JOBS 20
+#define MAX_BG_JOBS 50
 
 //Global variable for the main pid for the shell
 pid_t mainPid;
@@ -62,6 +62,7 @@ static void siginthandler (int signum) {
 
     pid_t currentPid = getpid();
 
+    //Quit the process as long as it is not the main shell
     if (currentPid != mainPid) {
       exit(EXIT_SUCCESS);
     }
@@ -72,6 +73,7 @@ static void siginthandler (int signum) {
 
 //Function that will ignore the SIGTSTP (CTRL+Z) signal
 static void sigtstphandler (int signum) {
+  printf("\n");
 }
 
 //Struct for background jobs
@@ -151,7 +153,16 @@ int main(void)
 
        //Print out the background jobs
        for (int i=1; i<bgJobCount; i++) {
-         printf("[%d]\t %s\t %ld\n", jobList[i].key, jobList[i].command, (long)jobList[i].jobPid);
+
+         //Check to see whether the job is active or finished
+         int status;
+         pid_t pid = waitpid(jobList[i].jobPid, &status, WNOHANG);
+
+         //If the job is active, print it out
+         if (pid == 0) {
+           printf("[%d]\t%s\t%ld\n", jobList[i].key, jobList[i].command, (long)jobList[i].jobPid);
+         }
+
        }
 
        //Obtain the next command
