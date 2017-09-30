@@ -6,6 +6,7 @@
 #include <time.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <sys/types.h>
 
 // This code is given for illustration purposes. You need not include or follow this
 // strictly. Feel free to writer better or bug free code. This example code block does not
@@ -16,6 +17,9 @@
 #define MAX_ARGS 20
 #define MAX_DIRECTORY_SIZE 1024
 #define MAX_BG_JOBS 20
+
+//Global variable for the main pid for the shell
+pid_t mainPid;
 
 int getcmd(char *currentDirectory, char *args[], int *background)
 {
@@ -53,10 +57,17 @@ int getcmd(char *currentDirectory, char *args[], int *background)
   return i;
 }
 
-//Function that will quit if SIGINT (CTRL+C) is picked up
+//Function that will quit any processes running in the shell if SIGINT (CTRL+C) is picked up
 static void siginthandler (int signum) {
+
+    pid_t currentPid = getpid();
+
+    if (currentPid != mainPid) {
+      exit(EXIT_SUCCESS);
+    }
+
     printf("\n");
-    exit(0);
+
 }
 
 //Function that will ignore the SIGTSTP (CTRL+Z) signal
@@ -73,6 +84,9 @@ typedef struct backgroundJob {
 
 int main(void)
 {
+
+  //Assign the main pid for the shell
+  mainPid = getpid();
 
   signal(SIGINT, siginthandler);
   signal(SIGTSTP, sigtstphandler);
@@ -116,8 +130,37 @@ int main(void)
          waitpid(requestedPid, &jobStatus, WUNTRACED);
        }
 
+
        //Obtain the next command
        continue;
+     }
+
+     //Check if the user wants to change the working directory before forking
+     if (strcmp("cd", args[0]) == 0) {
+       char* directory = args[1];
+       chdir(directory);
+
+       //Obtain the next command
+       continue;
+     }
+
+     //Check if the user specified the jobs command
+     if (strcmp("jobs", args[0]) == 0 ) {
+
+       printf("ID\tName\tPID\n");
+
+       //Print out the background jobs
+       for (int i=1; i<bgJobCount; i++) {
+         printf("[%d]\t %s\t %ld\n", jobList[i].key, jobList[i].command, (long)jobList[i].jobPid);
+       }
+
+       //Obtain the next command
+       continue;
+     }
+
+     //Check if the user wishes to exit the shell
+     if (strcmp("exit", args[0]) == 0) {
+       exit(EXIT_SUCCESS);
      }
 
 
@@ -145,36 +188,14 @@ int main(void)
          args[i] = NULL;
        }
 
-       //Check if the user wants to change the working directory
-       if (strcmp("cd", args[0]) == 0) {
-         char* directory = args[1];
-         chdir(directory);
-       }
-       //Check if the user wants to exit
-       else if (strcmp("exit", args[0]) == 0) {
-         exit(EXIT_FAILURE);
-       }
-       //Check if the user specified the jobs command
-       else if (strcmp("jobs", args[0]) == 0 ) {
-
-         printf("ID\tName\tPID\n");
-         //Print out the background jobs
-         for (int i=1; i<bgJobCount; i++) {
-           printf("[%d]\t %s\t %ld\n", jobList[i].key, jobList[i].command, (long)jobList[i].jobPid);
-         }
-
-        //End the child process
-         exit(EXIT_SUCCESS);
-
-       }
-       else {
          //Sleep before executing command
          int w;
          w = rand() % 10;
          sleep(w);
+
          //Execute the command
         execvp(args[0], args);
-      }
+
 
     }
      //Parent process
@@ -186,10 +207,6 @@ int main(void)
          waitpid(pid, &status, WUNTRACED);
       }
 
-      //If the user requested to exit, end the parent process
-      if (status != EXIT_SUCCESS && (strcmp("exit", args[0]) == 0)) {
-        exit(0);
-      }
     }
   }
 }
