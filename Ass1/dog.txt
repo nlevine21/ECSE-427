@@ -1,0 +1,5 @@
+Q1.docx
+Q3.c
+a.out
+dog.txt
+shell.c

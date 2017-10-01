@@ -7,6 +7,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <fcntl.h>
 
 // This code is given for illustration purposes. You need not include or follow this
 // strictly. Feel free to writer better or bug free code. This example code block does not
@@ -15,13 +16,14 @@
 
 //Define the max number of arguments to be 20
 #define MAX_ARGS 20
+
 #define MAX_DIRECTORY_SIZE 1024
 #define MAX_BG_JOBS 50
 
 //Global variable for the main pid for the shell
 pid_t mainPid;
 
-int getcmd(char *currentDirectory, char *args[], int *background)
+int getcmd(char *currentDirectory, char *args[], int *background, int *redirectIndex)
 {
   int length, i = 0;
   char* token, *loc;
@@ -50,6 +52,12 @@ int getcmd(char *currentDirectory, char *args[], int *background)
         }
       }
     if (strlen(token) > 0) {
+
+      //If the '>' operator is found, set the redirect pointer to the correct index
+      if (strcmp(">", token) == 0) {
+        *redirectIndex = i;
+      }
+
       args[i++] = token;
     }
   }
@@ -100,10 +108,26 @@ int main(void)
 
    int bg;
 
+   int redirectedFileDesc = -1;
+
    //Key to be used for background jobs
    int bgJobCount = 1;
 
+   int stdout;
+
    while(1) {
+
+     //Set the redirectIndex to be -1 (to be updated by getcmd)
+     int redirectIndex = -1;
+
+
+     //If necessary close the file which we've redirected the output into and re-open STDOUT
+     if (redirectedFileDesc != -1) {
+       close(redirectedFileDesc);
+       dup2(stdout, 1);
+       close(stdout);
+       redirectedFileDesc = -1;
+     }
 
      bg = 0;
 
@@ -116,7 +140,26 @@ int main(void)
 
      currentDirectory = getcwd(buf, sizeof(buf));
 
-     int cnt = getcmd(currentDirectory, args, &bg);
+     int cnt = getcmd(currentDirectory, args, &bg, &redirectIndex);
+
+     //Output redirection if necessary
+     if (redirectIndex != -1) {
+
+       //Create a duplicate for stdout
+       stdout = dup(1);
+
+       //Close STDOUT and open the specified file
+       close(1);
+       char* newFile = args[redirectIndex+1];
+
+      redirectedFileDesc = open(newFile, O_WRONLY | O_CREAT);
+
+       //Delete the rest of the command
+       for (int i=redirectIndex; i<MAX_ARGS; i++) {
+         args[i] = NULL;
+       }
+     }
+
 
      //Check to see if the user requested to fg before forking
      if (strcmp("fg", args[0]) == 0 ) {
@@ -193,6 +236,7 @@ int main(void)
 
      //Child process
      if (pid == 0) {
+
 
        //Set all the remaining arguments to be null
        for(int i=cnt; i<(MAX_ARGS-cnt); i++) {
